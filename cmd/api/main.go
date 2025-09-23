@@ -9,13 +9,30 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alexm/fuzzy-builder/internal/database/postgresql"
+	"github.com/alexm/fuzzy-builder/internal/repositories"
+	"github.com/alexm/fuzzy-builder/internal/services"
 	rest "github.com/alexm/fuzzy-builder/internal/transport/rest"
 )
 
 func main() {
 	addr := getEnv("HTTP_ADDR", ":8080")
+	dsn := getEnv("DATABASE_URL", "postgresql://localhost:5432/fuzzy_builder")
+	jwtSecret := getEnv("JWT_SECRET", "dev-secret-change-me")
 
-	srv := rest.NewServer()
+	ctx := context.Background()
+	pool, err := postgresql.NewPool(ctx, dsn)
+	if err != nil {
+		log.Fatalf("db error: %v", err)
+	}
+	defer pool.Close()
+
+	usersRepo := repositories.NewUserRepository(pool)
+	projectsRepo := repositories.NewProjectRepository(pool)
+	hasher := services.NewPasswordHasher()
+	jwt := services.NewJWTIssuer(jwtSecret, "fuzzy-builder", 24*time.Hour)
+
+	srv := rest.NewServer(usersRepo, projectsRepo, hasher, jwt)
 	handler := srv.Router()
 
 	server := &http.Server{

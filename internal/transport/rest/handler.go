@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 
@@ -19,10 +20,11 @@ type Server struct {
 	jwt      services.JWTIssuer
 	projects *repositories.ProjectRepository
 	defects  *repositories.DefectRepository
+	comments *repositories.CommentRepository
 }
 
-func NewServer(users *repositories.UserRepository, projects *repositories.ProjectRepository, defects *repositories.DefectRepository, passwd services.PasswordHasher, jwt services.JWTIssuer) *Server {
-	return &Server{users: users, projects: projects, defects: defects, passwd: passwd, jwt: jwt}
+func NewServer(users *repositories.UserRepository, projects *repositories.ProjectRepository, defects *repositories.DefectRepository, comments *repositories.CommentRepository, passwd services.PasswordHasher, jwt services.JWTIssuer) *Server {
+	return &Server{users: users, projects: projects, defects: defects, comments: comments, passwd: passwd, jwt: jwt}
 }
 
 func (s *Server) Router() http.Handler {
@@ -44,6 +46,7 @@ func (s *Server) Router() http.Handler {
 	api.HandleFunc("/defects", s.handleDefectsList).Methods(http.MethodGet)
 	api.HandleFunc("/defects", s.handleDefectCreate).Methods(http.MethodPost)
 	api.HandleFunc("/defects/{id}/status", s.handleDefectUpdateStatus).Methods(http.MethodPut)
+	api.HandleFunc("/defects/{id}/comments", s.handleDefectAddComment).Methods(http.MethodPost)
 	return r
 }
 
@@ -309,4 +312,32 @@ func (s *Server) handleDefectUpdateStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type defectAddCommentRequest struct {
+	Text string `json:"text"`
+}
+
+func (s *Server) handleDefectAddComment(w http.ResponseWriter, r *http.Request) {
+	idStr := mux.Vars(r)["id"]
+	defectID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req defectAddCommentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if strings.TrimSpace(req.Text) == "" {
+		writeError(w, http.StatusBadRequest, "text required")
+		return
+	}
+	c := &models.Comment{DefectID: defectID, UserID: 0, Text: req.Text}
+	if err := s.comments.Create(r.Context(), c); err != nil {
+		writeError(w, http.StatusInternalServerError, "cannot add comment")
+		return
+	}
+	writeJSON(w, http.StatusCreated, c)
 }

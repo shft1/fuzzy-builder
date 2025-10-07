@@ -18,10 +18,11 @@ type Server struct {
 	passwd   services.PasswordHasher
 	jwt      services.JWTIssuer
 	projects *repositories.ProjectRepository
+	defects  *repositories.DefectRepository
 }
 
-func NewServer(users *repositories.UserRepository, projects *repositories.ProjectRepository, passwd services.PasswordHasher, jwt services.JWTIssuer) *Server {
-	return &Server{users: users, projects: projects, passwd: passwd, jwt: jwt}
+func NewServer(users *repositories.UserRepository, projects *repositories.ProjectRepository, defects *repositories.DefectRepository, passwd services.PasswordHasher, jwt services.JWTIssuer) *Server {
+	return &Server{users: users, projects: projects, defects: defects, passwd: passwd, jwt: jwt}
 }
 
 func (s *Server) Router() http.Handler {
@@ -38,6 +39,11 @@ func (s *Server) Router() http.Handler {
 	api.HandleFunc("/projects", s.handleProjectCreate).Methods(http.MethodPost)
 	api.HandleFunc("/projects/{id}", s.handleProjectUpdate).Methods(http.MethodPut)
 	api.HandleFunc("/projects/{id}", s.handleProjectDelete).Methods(http.MethodDelete)
+
+	// Defects
+	api.HandleFunc("/defects", s.handleDefectsList).Methods(http.MethodGet)
+	api.HandleFunc("/defects", s.handleDefectCreate).Methods(http.MethodPost)
+	api.HandleFunc("/defects/{id}/status", s.handleDefectUpdateStatus).Methods(http.MethodPut)
 	return r
 }
 
@@ -207,6 +213,99 @@ func (s *Server) handleProjectDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.projects.Delete(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, "cannot delete")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleDefectsList(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	var f repositories.DefectFilter
+	if v := q.Get("project_id"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			f.ProjectID = &n
+		}
+	}
+	if v := q.Get("assigned_to"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			f.AssignedTo = &n
+		}
+	}
+	if v := q.Get("status"); v != "" {
+		s := models.DefectStatus(v)
+		f.Status = &s
+	}
+	if v := q.Get("priority"); v != "" {
+		p := models.DefectPriority(v)
+		f.Priority = &p
+	}
+	if v := q.Get("limit"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
+			f.Limit = int32(n)
+		}
+	} else {
+		f.Limit = 20
+	}
+	if v := q.Get("offset"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
+			f.Offset = int32(n)
+		}
+	}
+	items, err := s.defects.List(r.Context(), f)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list defects")
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+type defectCreateRequest struct {
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	ProjectID   int64   `json:"project_id"`
+	AssignedTo  *int64  `json:"assigned_to"`
+	Priority    string  `json:"priority"`
+	DueDate     *string `json:"due_date"`
+}
+
+func (s *Server) handleDefectCreate(w http.ResponseWriter, r *http.Request) {
+	var req defectCreateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if req.Title == "" || req.ProjectID == 0 || req.Priority == "" {
+		writeError(w, http.StatusBadRequest, "missing fields")
+		return
+	}
+	priority := models.DefectPriority(req.Priority)
+	d := &models.Defect{Title: req.Title, Description: req.Description, ProjectID: req.ProjectID, AssignedTo: req.AssignedTo, Status: models.DefectStatusNew, Priority: priority, CreatedBy: 0}
+	if err := s.defects.Create(r.Context(), d); err != nil {
+		writeError(w, http.StatusInternalServerError, "cannot create defect")
+		return
+	}
+	writeJSON(w, http.StatusCreated, d)
+}
+
+type defectUpdateStatusRequest struct {
+	Status string `json:"status"`
+}
+
+func (s *Server) handleDefectUpdateStatus(w http.ResponseWriter, r *http.Request) {
+	idStr := mux.Vars(r)["id"]
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req defectUpdateStatusRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	status := models.DefectStatus(req.Status)
+	if err := s.defects.UpdateStatus(r.Context(), id, status); err != nil {
+		writeError(w, http.StatusInternalServerError, "cannot update status")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

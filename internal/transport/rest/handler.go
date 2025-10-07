@@ -47,6 +47,7 @@ func (s *Server) Router() http.Handler {
 	api.HandleFunc("/defects", s.handleDefectCreate).Methods(http.MethodPost)
 	api.HandleFunc("/defects/{id}/status", s.handleDefectUpdateStatus).Methods(http.MethodPut)
 	api.HandleFunc("/defects/{id}/comments", s.handleDefectAddComment).Methods(http.MethodPost)
+	api.HandleFunc("/defects/{id}/comments", s.handleDefectListComments).Methods(http.MethodGet)
 	return r
 }
 
@@ -340,4 +341,32 @@ func (s *Server) handleDefectAddComment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusCreated, c)
+}
+
+func (s *Server) handleDefectListComments(w http.ResponseWriter, r *http.Request) {
+	idStr := mux.Vars(r)["id"]
+	defectID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	q := r.URL.Query()
+	var limit int32 = 20
+	var offset int32 = 0
+	if v := q.Get("limit"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
+			limit = int32(n)
+		}
+	}
+	if v := q.Get("offset"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
+			offset = int32(n)
+		}
+	}
+	items, err := s.comments.ListByDefect(r.Context(), defectID, limit, offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list comments")
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }

@@ -2,10 +2,12 @@
 package rest
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 
@@ -51,6 +53,7 @@ func (s *Server) Router() http.Handler {
 	api.HandleFunc("/defects/{id}/comments", s.handleDefectListComments).Methods(http.MethodGet)
 	api.HandleFunc("/defects/{id}/attachments", s.handleDefectAddAttachment).Methods(http.MethodPost)
 	api.HandleFunc("/defects/{id}/attachments", s.handleDefectListAttachments).Methods(http.MethodGet)
+	api.HandleFunc("/reports/defects", s.handleReportDefectsCSV).Methods(http.MethodGet)
 	return r
 }
 
@@ -429,4 +432,55 @@ func (s *Server) handleDefectListAttachments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) handleReportDefectsCSV(w http.ResponseWriter, r *http.Request) {
+	// For MVP, reuse DefectFilter query params
+	q := r.URL.Query()
+	var f repositories.DefectFilter
+	if v := q.Get("project_id"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			f.ProjectID = &n
+		}
+	}
+	if v := q.Get("assigned_to"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			f.AssignedTo = &n
+		}
+	}
+	if v := q.Get("status"); v != "" {
+		s := models.DefectStatus(v)
+		f.Status = &s
+	}
+	if v := q.Get("priority"); v != "" {
+		p := models.DefectPriority(v)
+		f.Priority = &p
+	}
+	f.Limit = 10000
+	f.Offset = 0
+	items, err := s.defects.List(r.Context(), f)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to query defects")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=defects.csv")
+	enc := csv.NewWriter(w)
+	_ = enc.Write([]string{"id", "title", "project_id", "assigned_to", "status", "priority", "due_date", "created_by", "created_at"})
+	for _, d := range items {
+		var assigned string
+		if d.AssignedTo != nil {
+			assigned = strconv.FormatInt(*d.AssignedTo, 10)
+		}
+		var due string
+		if d.DueDate != nil {
+			due = d.DueDate.Format(time.RFC3339)
+		}
+		_ = enc.Write([]string{
+			strconv.FormatInt(d.ID, 10), d.Title, strconv.FormatInt(d.ProjectID, 10), assigned,
+			string(d.Status), string(d.Priority), due, strconv.FormatInt(d.CreatedBy, 10), d.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	enc.Flush()
 }

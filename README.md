@@ -71,6 +71,63 @@
 
 Статусы дефекта: `new → in_progress → on_review → closed` (правила переходов контролируются в сервисе). Приоритеты: `low | medium | high`.
 
+### 5.1. ERD (Mermaid)
+
+```mermaid
+erDiagram
+  USERS {
+    bigint id PK
+    text email
+    text password_hash
+    text role
+    text full_name
+    timestamptz created_at
+  }
+
+  PROJECTS {
+    bigint id PK
+    text name
+    text description
+    bigint created_by FK
+    timestamptz created_at
+  }
+
+  DEFECTS {
+    bigint id PK
+    text title
+    text description
+    bigint project_id FK
+    bigint assigned_to FK
+    text status
+    text priority
+    timestamptz due_date
+    bigint created_by FK
+    timestamptz created_at
+  }
+
+  ATTACHMENTS {
+    bigint id PK
+    bigint defect_id FK
+    text filename
+    text filepath
+    bigint uploaded_by FK
+    timestamptz created_at
+  }
+
+  USERS ||--o{ PROJECTS : "created_by"
+  USERS ||--o{ DEFECTS : "assigned_to"
+  USERS ||--o{ DEFECTS : "created_by"
+  USERS ||--o{ ATTACHMENTS : "uploaded_by"
+  PROJECTS ||--o{ DEFECTS : "project_id"
+  DEFECTS ||--o{ ATTACHMENTS : "defect_id"
+```
+
+Примечания:
+- `users.role ∈ {engineer, manager, observer}`
+- `defects.status ∈ {new, in_progress, on_review, closed}`
+- `defects.priority ∈ {low, medium, high}`
+- FK с пометкой `o{` означают, что связь опциональна со стороны потомка (например, `assigned_to` может быть NULL).
+
 ---
 
 ## 6. REST API (основные endpoints)

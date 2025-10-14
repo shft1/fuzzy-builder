@@ -51,4 +51,10 @@ jobs:
           file: cmd/migrator/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository }}/migrator:latest
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: true
+          tags: ghcr.io/${{ github.repository }}/frontend:latest
 

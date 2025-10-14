@@ -1,11 +1,17 @@
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { Button, Card, DatePicker, Form, Input, Select, Space } from 'antd'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 export function DefectNewPage() {
   const token = useAuthStore(s => s.token)
   const navigate = useNavigate()
+  const [projects, setProjects] = useState<any[]>([])
+  useEffect(() => {
+    if (!token) return
+    api.get('/api/projects', { headers: { Authorization: `Bearer ${token}` } }).then(r => setProjects(r.data))
+  }, [token])
   const onFinish = async (v: any) => {
     const body = {
       title: v.title,
@@ -29,7 +35,7 @@ export function DefectNewPage() {
         </Form.Item>
         <Space wrap>
           <Form.Item name="project_id" label="Проект" rules={[{ required: true }]}>
-            <Input type="number" min={1} />
+            <Select style={{ width: 240 }} options={projects.map(p => ({ value: p.id, label: p.name }))} />
           </Form.Item>
           <Form.Item name="assigned_to" label="Исполнитель">
             <Input type="number" min={1} />

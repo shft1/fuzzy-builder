@@ -3,7 +3,10 @@ package rest
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 type contextKey string
@@ -77,4 +80,84 @@ func (s *Server) requireManager(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// recoveryMiddleware recovers from panics and returns 500 JSON
+func (s *Server) recoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				writeError(w, http.StatusInternalServerError, "internal server error")
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// securityHeaders adds basic security headers
+func (s *Server) securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// corsMiddleware allows simple CORS
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// bodyLimit limits request body size
+func (s *Server) bodyLimit(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// simpleRateLimit limits requests per IP in window
+func (s *Server) simpleRateLimit(maxPerMin int) func(http.Handler) http.Handler {
+	var mu sync.Mutex
+	buckets := map[string]struct {
+		count int
+		ts    time.Time
+	}{}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := r.RemoteAddr
+			mu.Lock()
+			b := buckets[ip]
+			if time.Since(b.ts) > time.Minute {
+				b = struct {
+					count int
+					ts    time.Time
+				}{0, time.Now()}
+			}
+			b.count++
+			b.ts = time.Now()
+			buckets[ip] = b
+			c := b.count
+			mu.Unlock()
+			if c > maxPerMin {
+				w.Header().Set("Retry-After", strconv.Itoa(60))
+				writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

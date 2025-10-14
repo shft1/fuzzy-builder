@@ -35,6 +35,11 @@ func NewServer(users *repositories.UserRepository, projects *repositories.Projec
 
 func (s *Server) Router() http.Handler {
 	r := mux.NewRouter()
+	r.Use(s.recoveryMiddleware)
+	r.Use(s.securityHeaders)
+	r.Use(s.corsMiddleware)
+	r.Use(s.bodyLimit(10 << 20))
+	r.Use(s.simpleRateLimit(120))
 	r.HandleFunc("/health", s.handleHealth).Methods(http.MethodGet)
 	s.registerSwagger(r)
 	r.HandleFunc("/api/auth/register", s.handleRegister).Methods(http.MethodPost)

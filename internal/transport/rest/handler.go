@@ -41,9 +41,13 @@ func (s *Server) Router() http.Handler {
 	api := r.PathPrefix("/api").Subrouter()
 	api.Use(s.jwtAuth)
 	api.HandleFunc("/projects", s.handleProjectsList).Methods(http.MethodGet)
-	api.HandleFunc("/projects", s.handleProjectCreate).Methods(http.MethodPost)
-	api.HandleFunc("/projects/{id}", s.handleProjectUpdate).Methods(http.MethodPut)
-	api.HandleFunc("/projects/{id}", s.handleProjectDelete).Methods(http.MethodDelete)
+
+	// Manager-only routes
+	apiManager := r.PathPrefix("/api").Subrouter()
+	apiManager.Use(s.jwtAuth, s.requireManager)
+	apiManager.HandleFunc("/projects", s.handleProjectCreate).Methods(http.MethodPost)
+	apiManager.HandleFunc("/projects/{id}", s.handleProjectUpdate).Methods(http.MethodPut)
+	apiManager.HandleFunc("/projects/{id}", s.handleProjectDelete).Methods(http.MethodDelete)
 
 	// Defects
 	api.HandleFunc("/defects", s.handleDefectsList).Methods(http.MethodGet)
@@ -135,12 +139,12 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing bearer token", http.StatusUnauthorized)
 		return
 	}
-	claims, _, err := s.jwt.ParseToken(auth[7:])
+	userID, role, err := s.jwt.ParseToken(auth[7:])
 	if err != nil {
 		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]any{"claims": claims})
+	_ = json.NewEncoder(w).Encode(map[string]any{"user_id": userID, "role": role})
 }
 
 func (s *Server) handleProjectsList(w http.ResponseWriter, r *http.Request) {

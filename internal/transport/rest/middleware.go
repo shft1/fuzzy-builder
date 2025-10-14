@@ -9,7 +9,8 @@ import (
 type contextKey string
 
 const (
-	ctxRole contextKey = "role"
+	ctxUserID contextKey = "userID"
+	ctxRole   contextKey = "role"
 )
 
 func (s *Server) jwtAuth(next http.Handler) http.Handler {
@@ -20,12 +21,14 @@ func (s *Server) jwtAuth(next http.Handler) http.Handler {
 			return
 		}
 		token := strings.TrimPrefix(auth, "Bearer ")
-		_, role, err := s.jwt.ParseToken(token)
+		userID, role, err := s.jwt.ParseToken(token)
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "invalid token")
 			return
 		}
-		ctx := context.WithValue(r.Context(), ctxRole, role)
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, ctxUserID, userID)
+		ctx = context.WithValue(ctx, ctxRole, role)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -54,4 +57,24 @@ func roleFromContext(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+func userIDFromContext(ctx context.Context) int64 {
+	if v := ctx.Value(ctxUserID); v != nil {
+		if id, ok := v.(int64); ok {
+			return id
+		}
+	}
+	return 0
+}
+
+func (s *Server) requireManager(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		role := roleFromContext(r.Context())
+		if role != "manager" {
+			writeError(w, http.StatusForbidden, "manager role required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

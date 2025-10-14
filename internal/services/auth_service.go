@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -10,7 +11,7 @@ import (
 
 type JWTIssuer interface {
 	GenerateToken(userID int64, role string) (string, error)
-	ParseToken(tokenString string) (*jwt.RegisteredClaims, string, error)
+	ParseToken(tokenString string) (userID int64, role string, err error)
 }
 
 type jwtIssuer struct {
@@ -25,6 +26,7 @@ func NewJWTIssuer(secret, issuer string, ttl time.Duration) JWTIssuer {
 
 func (j *jwtIssuer) GenerateToken(userID int64, role string) (string, error) {
 	claims := jwt.RegisteredClaims{
+		ID:        strconv.FormatInt(userID, 10),
 		Issuer:    j.issuer,
 		Subject:   role,
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -34,18 +36,19 @@ func (j *jwtIssuer) GenerateToken(userID int64, role string) (string, error) {
 	return token.SignedString(j.secret)
 }
 
-func (j *jwtIssuer) ParseToken(tokenString string) (*jwt.RegisteredClaims, string, error) {
+func (j *jwtIssuer) ParseToken(tokenString string) (int64, string, error) {
 	tok, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return j.secret, nil
 	})
 	if err != nil {
-		return nil, "", err
+		return 0, "", err
 	}
 	claims, ok := tok.Claims.(*jwt.RegisteredClaims)
 	if !ok || !tok.Valid {
-		return nil, "", errors.New("invalid token")
+		return 0, "", errors.New("invalid token")
 	}
-	return claims, claims.Subject, nil
+	userID, _ := strconv.ParseInt(claims.ID, 10, 64)
+	return userID, claims.Subject, nil
 }
 
 type PasswordHasher interface {

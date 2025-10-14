@@ -40,3 +40,14 @@ func (r *AttachmentRepository) ListByDefect(ctx context.Context, defectID int64,
 	}
 	return out, rows.Err()
 }
+
+func (r *AttachmentRepository) GetByID(ctx context.Context, id int64) (*models.Attachment, error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT id, defect_id, filename, filepath, uploaded_by, created_at FROM attachments WHERE id=$1`, id,
+	)
+	var a models.Attachment
+	if err := row.Scan(&a.ID, &a.DefectID, &a.Filename, &a.Filepath, &a.UploadedBy, &a.CreatedAt); err != nil {
+		return nil, err
+	}
+	return &a, nil
+}

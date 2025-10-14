@@ -65,6 +65,7 @@ func (s *Server) Router() http.Handler {
 	api.HandleFunc("/defects/{id}/status", s.handleDefectUpdateStatus).Methods(http.MethodPut)
 	api.HandleFunc("/defects/{id}/attachments", s.handleDefectAddAttachment).Methods(http.MethodPost)
 	api.HandleFunc("/defects/{id}/attachments", s.handleDefectListAttachments).Methods(http.MethodGet)
+	api.HandleFunc("/attachments/{id}/download", s.handleAttachmentDownload).Methods(http.MethodGet)
 	api.HandleFunc("/reports/defects", s.handleReportDefectsCSV).Methods(http.MethodGet)
 	api.HandleFunc("/reports/analytics", s.handleAnalytics).Methods(http.MethodGet)
 	return r
@@ -418,6 +419,22 @@ func (s *Server) handleDefectListAttachments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) handleAttachmentDownload(w http.ResponseWriter, r *http.Request) {
+	idStr := mux.Vars(r)["id"]
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	a, err := s.attach.GetByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+a.Filename+"\"")
+	http.ServeFile(w, r, a.Filepath)
 }
 
 func (s *Server) handleDefectGet(w http.ResponseWriter, r *http.Request) {

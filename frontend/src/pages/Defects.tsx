@@ -28,6 +28,7 @@ export function DefectsPage() {
   return (
     <>
       <Space style={{ marginBottom: 16 }} wrap>
+        <Button type="primary"><Link to="/defects/new">Создать дефект</Link></Button>
         <Select placeholder="Статус" allowClear style={{ width: 200 }} value={status} onChange={setStatus}
           options={[
             { value: 'new', label: 'Новая' },

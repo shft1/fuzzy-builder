@@ -1,7 +1,8 @@
 import { useAuthStore } from '@/stores/auth'
 import axios from 'axios'
 
-export const api = axios.create({ baseURL: '/' })
+const BASE = (import.meta as any).env?.VITE_API_BASE || '/'
+export const api = axios.create({ baseURL: BASE })
 
 api.interceptors.request.use(config => {
   const token = useAuthStore.getState().token

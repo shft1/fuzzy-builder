@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "vitest run",
     "preview": "vite preview",
     "lint": "echo 'no linter configured'"
   },
@@ -21,11 +22,15 @@
     "zustand": "^4.5.4"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.0",
     "@types/react": "^18.3.7",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react-swc": "^3.7.0",
+    "@vitest/ui": "^2.1.1",
+    "happy-dom": "^20.0.0",
+    "jsdom": "^27.0.0",
     "typescript": "^5.6.2",
-    "vite": "^5.4.8"
+    "vite": "^5.4.8",
+    "vitest": "^2.1.1"
   }
 }
-

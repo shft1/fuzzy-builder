@@ -19,6 +19,7 @@ func main() {
 	addr := getEnv("HTTP_ADDR", ":8080")
 	dsn := getEnv("DATABASE_URL", "postgresql://localhost:5432/fuzzy_builder")
 	jwtSecret := getEnv("JWT_SECRET", "dev-secret-change-me")
+	uploadDir := getEnv("UPLOAD_DIR", "uploads")
 
 	ctx := context.Background()
 	pool, err := postgresql.NewPool(ctx, dsn)
@@ -35,7 +36,7 @@ func main() {
 	jwt := services.NewJWTIssuer(jwtSecret, "fuzzy-builder", 24*time.Hour)
 
 	defectSvc := services.NewDefectService(defectsRepo)
-	srv := rest.NewServer(usersRepo, projectsRepo, defectsRepo, attachRepo, defectSvc, hasher, jwt)
+	srv := rest.NewServer(usersRepo, projectsRepo, defectsRepo, attachRepo, defectSvc, uploadDir, hasher, jwt)
 	handler := srv.Router()
 
 	server := &http.Server{

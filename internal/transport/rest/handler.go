@@ -4,9 +4,11 @@ package rest
 import (
 	"encoding/csv"
 	"encoding/json"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -24,10 +26,11 @@ type Server struct {
 	defects   *repositories.DefectRepository
 	attach    *repositories.AttachmentRepository
 	defectSvc *services.DefectService
+	uploadDir string
 }
 
-func NewServer(users *repositories.UserRepository, projects *repositories.ProjectRepository, defects *repositories.DefectRepository, attach *repositories.AttachmentRepository, defectSvc *services.DefectService, passwd services.PasswordHasher, jwt services.JWTIssuer) *Server {
-	return &Server{users: users, projects: projects, defects: defects, attach: attach, defectSvc: defectSvc, passwd: passwd, jwt: jwt}
+func NewServer(users *repositories.UserRepository, projects *repositories.ProjectRepository, defects *repositories.DefectRepository, attach *repositories.AttachmentRepository, defectSvc *services.DefectService, uploadDir string, passwd services.PasswordHasher, jwt services.JWTIssuer) *Server {
+	return &Server{users: users, projects: projects, defects: defects, attach: attach, defectSvc: defectSvc, uploadDir: uploadDir, passwd: passwd, jwt: jwt}
 }
 
 func (s *Server) Router() http.Handler {
@@ -56,6 +59,7 @@ func (s *Server) Router() http.Handler {
 	api.HandleFunc("/defects/{id}/attachments", s.handleDefectAddAttachment).Methods(http.MethodPost)
 	api.HandleFunc("/defects/{id}/attachments", s.handleDefectListAttachments).Methods(http.MethodGet)
 	api.HandleFunc("/reports/defects", s.handleReportDefectsCSV).Methods(http.MethodGet)
+	api.HandleFunc("/reports/analytics", s.handleAnalytics).Methods(http.MethodGet)
 	return r
 }
 
@@ -344,16 +348,36 @@ func (s *Server) handleDefectAddAttachment(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
-	var req defectAddAttachmentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if err := r.ParseMultipartForm(16 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid multipart")
 		return
 	}
-	if strings.TrimSpace(req.Filename) == "" || strings.TrimSpace(req.Filepath) == "" {
-		writeError(w, http.StatusBadRequest, "filename and filepath required")
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file required")
 		return
 	}
-	a := &models.Attachment{DefectID: defectID, Filename: req.Filename, Filepath: req.Filepath, UploadedBy: userIDFromContext(r.Context())}
+	defer file.Close()
+	if s.uploadDir == "" {
+		s.uploadDir = "uploads"
+	}
+	if err := os.MkdirAll(s.uploadDir, 0o755); err != nil {
+		writeError(w, http.StatusInternalServerError, "storage error")
+		return
+	}
+	safeName := filepath.Base(header.Filename)
+	dstPath := filepath.Join(s.uploadDir, safeName)
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "storage error")
+		return
+	}
+	defer dst.Close()
+	if _, err := io.Copy(dst, file); err != nil {
+		writeError(w, http.StatusInternalServerError, "write error")
+		return
+	}
+	a := &models.Attachment{DefectID: defectID, Filename: safeName, Filepath: dstPath, UploadedBy: userIDFromContext(r.Context())}
 	if err := s.attach.Create(r.Context(), a); err != nil {
 		writeError(w, http.StatusInternalServerError, "cannot add attachment")
 		return
@@ -438,4 +462,18 @@ func (s *Server) handleReportDefectsCSV(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 	enc.Flush()
+}
+
+func (s *Server) handleAnalytics(w http.ResponseWriter, r *http.Request) {
+	byStatus, err := s.defects.CountByStatus(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to aggregate by status")
+		return
+	}
+	byProject, err := s.defects.CountByProject(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to aggregate by project")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"by_status": byStatus, "by_project": byProject})
 }

@@ -93,6 +93,42 @@ func (r *DefectRepository) List(ctx context.Context, f DefectFilter) ([]models.D
 	return out, rows.Err()
 }
 
+func (r *DefectRepository) CountByStatus(ctx context.Context) (map[string]int64, error) {
+	rows, err := r.pool.Query(ctx, `SELECT status, COUNT(*) FROM defects GROUP BY status`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]int64)
+	for rows.Next() {
+		var s string
+		var c int64
+		if err := rows.Scan(&s, &c); err != nil {
+			return nil, err
+		}
+		out[s] = c
+	}
+	return out, rows.Err()
+}
+
+func (r *DefectRepository) CountByProject(ctx context.Context) (map[int64]int64, error) {
+	rows, err := r.pool.Query(ctx, `SELECT project_id, COUNT(*) FROM defects GROUP BY project_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[int64]int64)
+	for rows.Next() {
+		var pid int64
+		var c int64
+		if err := rows.Scan(&pid, &c); err != nil {
+			return nil, err
+		}
+		out[pid] = c
+	}
+	return out, rows.Err()
+}
+
 func itoa(n int) string {
 	// fast small int to string
 	const digits = "0123456789"

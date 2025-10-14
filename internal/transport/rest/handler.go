@@ -36,6 +36,7 @@ func NewServer(users *repositories.UserRepository, projects *repositories.Projec
 func (s *Server) Router() http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc("/health", s.handleHealth).Methods(http.MethodGet)
+	s.registerSwagger(r)
 	r.HandleFunc("/api/auth/register", s.handleRegister).Methods(http.MethodPost)
 	r.HandleFunc("/api/auth/login", s.handleLogin).Methods(http.MethodPost)
 	r.HandleFunc("/api/users/me", s.handleMe).Methods(http.MethodGet)

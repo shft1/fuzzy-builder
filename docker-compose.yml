@@ -1,0 +1,40 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: fuzzy
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  migrator:
+    build:
+      context: .
+      dockerfile: cmd/migrator/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/fuzzy?sslmode=disable
+      MIGRATIONS_DIR: /app/migrations
+    depends_on:
+      - db
+
+  api:
+    build: .
+    environment:
+      HTTP_ADDR: :8080
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/fuzzy?sslmode=disable
+      JWT_SECRET: dev-secret-change-me
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - uploads:/data/uploads
+    ports:
+      - "8080:8080"
+    depends_on:
+      - migrator
+
+volumes:
+  db_data:
+  uploads:
+

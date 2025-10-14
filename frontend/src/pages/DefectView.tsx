@@ -1,6 +1,6 @@
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
-import { Button, Card, Descriptions, Select, Space, Table, Tag } from 'antd'
+import { Button, Card, Descriptions, Select, Space, Table, Tag, Upload, message } from 'antd'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
@@ -35,6 +35,10 @@ export function DefectViewPage() {
         }}>Сменить статус</Button>
       </Space>
       <Card title="Вложения" style={{ marginTop: 16 }}>
+        <Upload name="file" multiple={false} action={`/api/defects/${id}/attachments`} headers={{ Authorization: `Bearer ${token||''}` }}
+          onChange={(info)=>{ if(info.file.status==='done'){ message.success('Загружено'); api.get(`/api/defects/${id}/attachments`, { headers: { Authorization: `Bearer ${token}` } }).then(r=>setAttachments(r.data)) } }}>
+          <Button type="primary" style={{ marginBottom: 8 }}>Загрузить</Button>
+        </Upload>
         <Table rowKey="id" dataSource={attachments} columns={[
           { title: 'Файл', dataIndex: 'filename' },
           { title: 'Действия', render: (_:any, a:any) => <a href={`/api/attachments/${a.id}/download`} target="_blank">Скачать</a> }

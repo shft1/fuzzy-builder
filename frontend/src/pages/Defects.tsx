@@ -11,6 +11,7 @@ export function DefectsPage() {
   const [items, setItems] = useState<Defect[]>([])
   const [status, setStatus] = useState<string | undefined>()
   const [priority, setPriority] = useState<string | undefined>()
+  const [search, setSearch] = useState('')
   const [changingId, setChangingId] = useState<number | null>(null)
   const [newStatus, setNewStatus] = useState<string>('in_progress')
   const [attachDefect, setAttachDefect] = useState<number | null>(null)
@@ -29,6 +30,7 @@ export function DefectsPage() {
     <>
       <Space style={{ marginBottom: 16 }} wrap>
         <Button type="primary"><Link to="/defects/new">Создать дефект</Link></Button>
+        <Input placeholder="Поиск" value={search} onChange={e=>setSearch(e.target.value)} allowClear style={{ width: 260 }} />
         <Select placeholder="Статус" allowClear style={{ width: 200 }} value={status} onChange={setStatus}
           options={[
             { value: 'new', label: 'Новая' },
@@ -46,7 +48,7 @@ export function DefectsPage() {
         />
         <Button onClick={() => { setStatus(undefined); setPriority(undefined) }}>Сбросить</Button>
       </Space>
-      <Table rowKey="id" dataSource={items} columns={[
+      <Table rowKey="id" dataSource={items.filter(d => d.title.toLowerCase().includes(search.toLowerCase()))} columns={[
         { title: 'Заголовок', dataIndex: 'title', render: (_:any, r:Defect) => <Link to={`/defects/${r.id}`}>{r.title}</Link> },
         { title: 'Проект', dataIndex: 'project_id' },
         { title: 'Статус', dataIndex: 'status', render: (v: string) => <Tag color={v==='closed'?'green':v==='in_progress'?'blue':v==='on_review'?'orange':'default'}>{v}</Tag> },

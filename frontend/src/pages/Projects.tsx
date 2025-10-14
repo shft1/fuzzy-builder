@@ -1,3 +1,4 @@
+import { ManagerOnly } from '@/components/ManagerOnly'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { Button, Form, Input, Modal, Space, Table } from 'antd'
@@ -33,7 +34,7 @@ export function ProjectsPage() {
   return (
     <>
       <Space style={{ marginBottom: 16 }}>
-        {role === 'manager' && <Button type="primary" onClick={() => setOpen(true)}>Создать проект</Button>}
+        <ManagerOnly><Button type="primary" onClick={() => setOpen(true)}>Создать проект</Button></ManagerOnly>
         <Input placeholder="Поиск" value={search} onChange={e=>setSearch(e.target.value)} allowClear style={{ width: 260 }} />
       </Space>
       <Table rowKey="id" dataSource={items.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))}
@@ -42,8 +43,8 @@ export function ProjectsPage() {
           { title: 'Название', dataIndex: 'name', sorter: (a:Project,b:Project)=>a.name.localeCompare(b.name) },
           { title: 'Описание', dataIndex: 'description' },
           role === 'manager' ? { title: 'Действия', render: (_:any, r:Project) => <Space>
-            <Button size="small" onClick={() => setEditing(r)}>Редактировать</Button>
-            <Button size="small" danger onClick={() => Modal.confirm({ title: 'Удалить проект?', onOk: async () => { await api.delete(`/api/projects/${r.id}`, { headers: { Authorization: `Bearer ${token}` } }); refresh() } })}>Удалить</Button>
+            <ManagerOnly><Button size="small" onClick={() => setEditing(r)}>Редактировать</Button></ManagerOnly>
+            <ManagerOnly><Button size="small" danger onClick={() => Modal.confirm({ title: 'Удалить проект?', onOk: async () => { await api.delete(`/api/projects/${r.id}`, { headers: { Authorization: `Bearer ${token}` } }); refresh() } })}>Удалить</Button></ManagerOnly>
           </Space> } : {}
         ]}
       />

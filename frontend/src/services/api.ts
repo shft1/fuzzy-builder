@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth'
+import { notification } from 'antd'
 import axios from 'axios'
 
 const BASE = (import.meta as any).env?.VITE_API_BASE || '/'
@@ -17,6 +18,9 @@ api.interceptors.response.use(undefined, (error) => {
   if (error?.response?.status === 401) {
     useAuthStore.getState().logout()
   }
+  // basic notification surface
+  const msg = error?.response?.data?.error || error?.message || 'Ошибка запроса'
+  notification.error({ message: 'Ошибка', description: msg })
   return Promise.reject(error)
 })
 

@@ -1,4 +1,5 @@
-import { Layout, Menu } from 'antd'
+import { useAuthStore } from '@/stores/auth'
+import { Button, Dropdown, Layout, Menu } from 'antd'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 
 const { Header, Sider, Content } = Layout
@@ -20,12 +21,25 @@ export function AppLayout() {
         />
       </Sider>
       <Layout>
-        <Header style={{ background: '#fff' }} />
+        <Header style={{ background: '#fff', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+          <UserMenu />
+        </Header>
         <Content style={{ margin: 16 }}>
           <Outlet />
         </Content>
       </Layout>
     </Layout>
+  )
+}
+
+function UserMenu() {
+  const user = useAuthStore(s => s.user)
+  const logout = useAuthStore(s => s.logout)
+  const items = [{ key: 'logout', label: <span onClick={logout}>Выйти</span> }]
+  return (
+    <Dropdown menu={{ items }} placement="bottomRight">
+      <Button>{user?.role || 'Пользователь'}</Button>
+    </Dropdown>
   )
 }
 

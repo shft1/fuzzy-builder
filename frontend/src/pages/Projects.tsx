@@ -33,9 +33,12 @@ export function ProjectsPage() {
       <Space style={{ marginBottom: 16 }}>
         {role === 'manager' && <Button type="primary" onClick={() => setOpen(true)}>Создать проект</Button>}
       </Space>
-      <Table rowKey="id" dataSource={items} columns={[
+      <Table rowKey="id" dataSource={items} pagination={{ pageSize: 10 }} columns={[
         { title: 'Название', dataIndex: 'name' },
         { title: 'Описание', dataIndex: 'description' },
+        role === 'manager' ? { title: 'Действия', render: (_:any, r:Project) => <Space>
+          <Button size="small" onClick={() => Modal.confirm({ title: 'Удалить проект?', onOk: async () => { await api.delete(`/api/projects/${r.id}`, { headers: { Authorization: `Bearer ${token}` } }); refresh() } })}>Удалить</Button>
+        </Space> } : {}
       ]} />
       <Modal title="Новый проект" open={open} onCancel={() => setOpen(false)} footer={null} destroyOnClose>
         <Form layout="vertical" onFinish={onCreate}>

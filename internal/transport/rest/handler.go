@@ -61,6 +61,7 @@ func (s *Server) Router() http.Handler {
 	// Defects
 	api.HandleFunc("/defects", s.handleDefectsList).Methods(http.MethodGet)
 	api.HandleFunc("/defects", s.handleDefectCreate).Methods(http.MethodPost)
+	api.HandleFunc("/defects/{id}", s.handleDefectGet).Methods(http.MethodGet)
 	api.HandleFunc("/defects/{id}/status", s.handleDefectUpdateStatus).Methods(http.MethodPut)
 	api.HandleFunc("/defects/{id}/attachments", s.handleDefectAddAttachment).Methods(http.MethodPost)
 	api.HandleFunc("/defects/{id}/attachments", s.handleDefectListAttachments).Methods(http.MethodGet)
@@ -417,6 +418,21 @@ func (s *Server) handleDefectListAttachments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) handleDefectGet(w http.ResponseWriter, r *http.Request) {
+	idStr := mux.Vars(r)["id"]
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	d, err := s.defects.GetByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
 }
 
 func (s *Server) handleReportDefectsCSV(w http.ResponseWriter, r *http.Request) {

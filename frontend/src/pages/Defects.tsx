@@ -2,6 +2,7 @@ import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { Button, Modal, Select, Space, Table, Tag, Upload, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 type Defect = { id: number; title: string; status: string; priority: string; project_id: number }
 
@@ -45,7 +46,7 @@ export function DefectsPage() {
         <Button onClick={() => { setStatus(undefined); setPriority(undefined) }}>Сбросить</Button>
       </Space>
       <Table rowKey="id" dataSource={items} columns={[
-        { title: 'Заголовок', dataIndex: 'title' },
+        { title: 'Заголовок', dataIndex: 'title', render: (_:any, r:Defect) => <Link to={`/defects/${r.id}`}>{r.title}</Link> },
         { title: 'Проект', dataIndex: 'project_id' },
         { title: 'Статус', dataIndex: 'status', render: (v: string) => <Tag color={v==='closed'?'green':v==='in_progress'?'blue':v==='on_review'?'orange':'default'}>{v}</Tag> },
         { title: 'Приоритет', dataIndex: 'priority' },

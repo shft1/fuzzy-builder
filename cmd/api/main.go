@@ -30,12 +30,12 @@ func main() {
 	usersRepo := repositories.NewUserRepository(pool)
 	projectsRepo := repositories.NewProjectRepository(pool)
 	defectsRepo := repositories.NewDefectRepository(pool)
-	commentsRepo := repositories.NewCommentRepository(pool)
 	attachRepo := repositories.NewAttachmentRepository(pool)
 	hasher := services.NewPasswordHasher()
 	jwt := services.NewJWTIssuer(jwtSecret, "fuzzy-builder", 24*time.Hour)
 
-	srv := rest.NewServer(usersRepo, projectsRepo, defectsRepo, commentsRepo, attachRepo, hasher, jwt)
+	defectSvc := services.NewDefectService(defectsRepo)
+	srv := rest.NewServer(usersRepo, projectsRepo, defectsRepo, attachRepo, defectSvc, hasher, jwt)
 	handler := srv.Router()
 
 	server := &http.Server{

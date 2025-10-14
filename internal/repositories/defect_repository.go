@@ -35,6 +35,17 @@ func (r *DefectRepository) Create(ctx context.Context, d *models.Defect) error {
 	return row.Scan(&d.ID, &d.CreatedAt)
 }
 
+func (r *DefectRepository) GetByID(ctx context.Context, id int64) (*models.Defect, error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT id, title, description, project_id, assigned_to, status, priority, due_date, created_by, created_at FROM defects WHERE id=$1`, id,
+	)
+	var d models.Defect
+	if err := row.Scan(&d.ID, &d.Title, &d.Description, &d.ProjectID, &d.AssignedTo, &d.Status, &d.Priority, &d.DueDate, &d.CreatedBy, &d.CreatedAt); err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
 func (r *DefectRepository) UpdateStatus(ctx context.Context, id int64, status models.DefectStatus) error {
 	_, err := r.pool.Exec(ctx, `UPDATE defects SET status=$1 WHERE id=$2`, status, id)
 	return err

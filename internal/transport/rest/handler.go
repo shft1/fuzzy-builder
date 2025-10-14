@@ -17,17 +17,17 @@ import (
 )
 
 type Server struct {
-	users    *repositories.UserRepository
-	passwd   services.PasswordHasher
-	jwt      services.JWTIssuer
-	projects *repositories.ProjectRepository
-	defects  *repositories.DefectRepository
-	comments *repositories.CommentRepository
-	attach   *repositories.AttachmentRepository
+	users     *repositories.UserRepository
+	passwd    services.PasswordHasher
+	jwt       services.JWTIssuer
+	projects  *repositories.ProjectRepository
+	defects   *repositories.DefectRepository
+	attach    *repositories.AttachmentRepository
+	defectSvc *services.DefectService
 }
 
-func NewServer(users *repositories.UserRepository, projects *repositories.ProjectRepository, defects *repositories.DefectRepository, comments *repositories.CommentRepository, attach *repositories.AttachmentRepository, passwd services.PasswordHasher, jwt services.JWTIssuer) *Server {
-	return &Server{users: users, projects: projects, defects: defects, comments: comments, attach: attach, passwd: passwd, jwt: jwt}
+func NewServer(users *repositories.UserRepository, projects *repositories.ProjectRepository, defects *repositories.DefectRepository, attach *repositories.AttachmentRepository, defectSvc *services.DefectService, passwd services.PasswordHasher, jwt services.JWTIssuer) *Server {
+	return &Server{users: users, projects: projects, defects: defects, attach: attach, defectSvc: defectSvc, passwd: passwd, jwt: jwt}
 }
 
 func (s *Server) Router() http.Handler {
@@ -53,8 +53,6 @@ func (s *Server) Router() http.Handler {
 	api.HandleFunc("/defects", s.handleDefectsList).Methods(http.MethodGet)
 	api.HandleFunc("/defects", s.handleDefectCreate).Methods(http.MethodPost)
 	api.HandleFunc("/defects/{id}/status", s.handleDefectUpdateStatus).Methods(http.MethodPut)
-	api.HandleFunc("/defects/{id}/comments", s.handleDefectAddComment).Methods(http.MethodPost)
-	api.HandleFunc("/defects/{id}/comments", s.handleDefectListComments).Methods(http.MethodGet)
 	api.HandleFunc("/defects/{id}/attachments", s.handleDefectAddAttachment).Methods(http.MethodPost)
 	api.HandleFunc("/defects/{id}/attachments", s.handleDefectListAttachments).Methods(http.MethodGet)
 	api.HandleFunc("/reports/defects", s.handleReportDefectsCSV).Methods(http.MethodGet)
@@ -293,7 +291,7 @@ func (s *Server) handleDefectCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	priority := models.DefectPriority(req.Priority)
-	d := &models.Defect{Title: req.Title, Description: req.Description, ProjectID: req.ProjectID, AssignedTo: req.AssignedTo, Status: models.DefectStatusNew, Priority: priority, CreatedBy: 0}
+	d := &models.Defect{Title: req.Title, Description: req.Description, ProjectID: req.ProjectID, AssignedTo: req.AssignedTo, Status: models.DefectStatusNew, Priority: priority, CreatedBy: userIDFromContext(r.Context())}
 	if err := s.defects.Create(r.Context(), d); err != nil {
 		writeError(w, http.StatusInternalServerError, "cannot create defect")
 		return
@@ -318,67 +316,20 @@ func (s *Server) handleDefectUpdateStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	status := models.DefectStatus(req.Status)
+	currentUserID := userIDFromContext(r.Context())
+	if s.defectSvc != nil {
+		if err := s.defectSvc.UpdateStatus(r.Context(), currentUserID, id, status); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if err := s.defects.UpdateStatus(r.Context(), id, status); err != nil {
 		writeError(w, http.StatusInternalServerError, "cannot update status")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-type defectAddCommentRequest struct {
-	Text string `json:"text"`
-}
-
-func (s *Server) handleDefectAddComment(w http.ResponseWriter, r *http.Request) {
-	idStr := mux.Vars(r)["id"]
-	defectID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid id")
-		return
-	}
-	var req defectAddCommentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
-		return
-	}
-	if strings.TrimSpace(req.Text) == "" {
-		writeError(w, http.StatusBadRequest, "text required")
-		return
-	}
-	c := &models.Comment{DefectID: defectID, UserID: 0, Text: req.Text}
-	if err := s.comments.Create(r.Context(), c); err != nil {
-		writeError(w, http.StatusInternalServerError, "cannot add comment")
-		return
-	}
-	writeJSON(w, http.StatusCreated, c)
-}
-
-func (s *Server) handleDefectListComments(w http.ResponseWriter, r *http.Request) {
-	idStr := mux.Vars(r)["id"]
-	defectID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid id")
-		return
-	}
-	q := r.URL.Query()
-	var limit int32 = 20
-	var offset int32 = 0
-	if v := q.Get("limit"); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
-			limit = int32(n)
-		}
-	}
-	if v := q.Get("offset"); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
-			offset = int32(n)
-		}
-	}
-	items, err := s.comments.ListByDefect(r.Context(), defectID, limit, offset)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list comments")
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
 }
 
 type defectAddAttachmentRequest struct {
@@ -402,7 +353,7 @@ func (s *Server) handleDefectAddAttachment(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "filename and filepath required")
 		return
 	}
-	a := &models.Attachment{DefectID: defectID, Filename: req.Filename, Filepath: req.Filepath, UploadedBy: 0}
+	a := &models.Attachment{DefectID: defectID, Filename: req.Filename, Filepath: req.Filepath, UploadedBy: userIDFromContext(r.Context())}
 	if err := s.attach.Create(r.Context(), a); err != nil {
 		writeError(w, http.StatusInternalServerError, "cannot add attachment")
 		return

@@ -1,7 +1,7 @@
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { Button, Card, Form, Input, Typography } from 'antd'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 export function LoginPage() {
   const setToken = useAuthStore(s => s.setToken)
@@ -31,6 +31,9 @@ export function LoginPage() {
         </Form.Item>
         <Button type="primary" htmlType="submit" block>Войти</Button>
       </Form>
+      <div style={{ marginTop: 12, textAlign: 'center' }}>
+        Нет аккаунта? <Link to="/register">Зарегистрироваться</Link>
+      </div>
     </Card>
   )
 }

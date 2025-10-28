@@ -19,17 +19,17 @@ import (
 )
 
 type Server struct {
-	users     *repositories.UserRepository
+	users     repositories.Users
 	passwd    services.PasswordHasher
 	jwt       services.JWTIssuer
-	projects  *repositories.ProjectRepository
-	defects   *repositories.DefectRepository
-	attach    *repositories.AttachmentRepository
+	projects  repositories.Projects
+	defects   repositories.Defects
+	attach    repositories.Attachments
 	defectSvc *services.DefectService
 	uploadDir string
 }
 
-func NewServer(users *repositories.UserRepository, projects *repositories.ProjectRepository, defects *repositories.DefectRepository, attach *repositories.AttachmentRepository, defectSvc *services.DefectService, uploadDir string, passwd services.PasswordHasher, jwt services.JWTIssuer) *Server {
+func NewServer(users repositories.Users, projects repositories.Projects, defects repositories.Defects, attach repositories.Attachments, defectSvc *services.DefectService, uploadDir string, passwd services.PasswordHasher, jwt services.JWTIssuer) *Server {
 	return &Server{users: users, projects: projects, defects: defects, attach: attach, defectSvc: defectSvc, uploadDir: uploadDir, passwd: passwd, jwt: jwt}
 }
 
@@ -176,6 +176,9 @@ func (s *Server) handleProjectsList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list projects")
 		return
 	}
+	if items == nil {
+		items = []models.Project{}
+	}
 	writeJSON(w, http.StatusOK, items)
 }
 
@@ -280,6 +283,9 @@ func (s *Server) handleDefectsList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list defects")
 		return
 	}
+	if items == nil {
+		items = []models.Defect{}
+	}
 	writeJSON(w, http.StatusOK, items)
 }
 
@@ -293,6 +299,11 @@ type defectCreateRequest struct {
 }
 
 func (s *Server) handleDefectCreate(w http.ResponseWriter, r *http.Request) {
+	// Observer не может создавать
+	if roleFromContext(r.Context()) == "observer" {
+		writeError(w, http.StatusForbidden, "observer cannot create defects")
+		return
+	}
 	var req defectCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json")
@@ -328,15 +339,13 @@ func (s *Server) handleDefectUpdateStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	status := models.DefectStatus(req.Status)
-	currentUserID := userIDFromContext(r.Context())
-	if s.defectSvc != nil {
-		if err := s.defectSvc.UpdateStatus(r.Context(), currentUserID, id, status); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+	// RBAC: инженер и наблюдатель не могут менять статус
+	role := roleFromContext(r.Context())
+	if role == "engineer" || role == "observer" {
+		writeError(w, http.StatusForbidden, "engineer cannot change status")
 		return
 	}
+	// Для остальных ролей разрешаем прямое изменение статуса
 	if err := s.defects.UpdateStatus(r.Context(), id, status); err != nil {
 		writeError(w, http.StatusInternalServerError, "cannot update status")
 		return
@@ -350,6 +359,11 @@ type defectAddAttachmentRequest struct {
 }
 
 func (s *Server) handleDefectAddAttachment(w http.ResponseWriter, r *http.Request) {
+	// Observer не может загружать вложения
+	if roleFromContext(r.Context()) == "observer" {
+		writeError(w, http.StatusForbidden, "observer cannot upload attachments")
+		return
+	}
 	idStr := mux.Vars(r)["id"]
 	defectID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -417,6 +431,9 @@ func (s *Server) handleDefectListAttachments(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list attachments")
 		return
+	}
+	if items == nil {
+		items = []models.Attachment{}
 	}
 	writeJSON(w, http.StatusOK, items)
 }

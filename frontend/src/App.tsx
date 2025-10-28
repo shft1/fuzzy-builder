@@ -10,6 +10,7 @@ import { DefectViewPage } from './pages/DefectView'
 import { DefectsPage } from './pages/Defects'
 import { LoginPage } from './pages/Login'
 import { ProjectsPage } from './pages/Projects'
+import { RegisterPage } from './pages/Register'
 import { ReportsPage } from './pages/Reports'
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
         <Routes>
           <Route element={<AuthLayout />}>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
           </Route>
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/dashboard" element={<DashboardPage />} />

@@ -12,10 +12,10 @@ var ErrInvalidStatusTransition = errors.New("invalid status transition")
 var ErrPermissionDenied = errors.New("permission denied")
 
 type DefectService struct {
-	repo *repositories.DefectRepository
+	repo repositories.Defects
 }
 
-func NewDefectService(repo *repositories.DefectRepository) *DefectService {
+func NewDefectService(repo repositories.Defects) *DefectService {
 	return &DefectService{repo: repo}
 }
 

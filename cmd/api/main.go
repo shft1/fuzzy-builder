@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/alexm/fuzzy-builder/internal/database/postgresql"
+	sqliteDB "github.com/alexm/fuzzy-builder/internal/database/sqlite"
 	"github.com/alexm/fuzzy-builder/internal/repositories"
 	"github.com/alexm/fuzzy-builder/internal/services"
 	rest "github.com/alexm/fuzzy-builder/internal/transport/rest"
@@ -18,20 +20,46 @@ import (
 func main() {
 	addr := getEnv("HTTP_ADDR", ":8080")
 	dsn := getEnv("DATABASE_URL", "postgresql://localhost:5432/fuzzy_builder")
+	driver := getEnv("DB_DRIVER", "postgres") // postgres|sqlite
 	jwtSecret := getEnv("JWT_SECRET", "dev-secret-change-me")
 	uploadDir := getEnv("UPLOAD_DIR", "uploads")
 
 	ctx := context.Background()
-	pool, err := postgresql.NewPool(ctx, dsn)
-	if err != nil {
-		log.Fatalf("db error: %v", err)
-	}
-	defer pool.Close()
 
-	usersRepo := repositories.NewUserRepository(pool)
-	projectsRepo := repositories.NewProjectRepository(pool)
-	defectsRepo := repositories.NewDefectRepository(pool)
-	attachRepo := repositories.NewAttachmentRepository(pool)
+	var usersRepo repositories.Users
+	var projectsRepo repositories.Projects
+	var defectsRepo repositories.Defects
+	var attachRepo repositories.Attachments
+
+	if driver == "sqlite" {
+		if dsn == "postgresql://localhost:5432/fuzzy_builder" {
+			dsn = getEnv("SQLITE_DSN", "file:fuzzy.db?cache=shared&_pragma=busy_timeout=5000")
+		}
+		db, err := sqliteDB.Open(dsn)
+		if err != nil {
+			log.Fatalf("sqlite open: %v", err)
+		}
+		if err := sqliteDB.CreateSchema(ctx, db); err != nil {
+			log.Fatalf("sqlite schema: %v", err)
+		}
+		// Ensure clean shutdown
+		defer func(db *sql.DB) { _ = db.Close() }(db)
+
+		usersRepo = repositories.NewSQLiteUsers(db)
+		projectsRepo = repositories.NewSQLiteProjects(db)
+		defectsRepo = repositories.NewSQLiteDefects(db)
+		attachRepo = repositories.NewSQLiteAttachments(db)
+	} else {
+		pool, err := postgresql.NewPool(ctx, dsn)
+		if err != nil {
+			log.Fatalf("db error: %v", err)
+		}
+		defer pool.Close()
+		usersRepo = repositories.NewUserRepository(pool)
+		projectsRepo = repositories.NewProjectRepository(pool)
+		defectsRepo = repositories.NewDefectRepository(pool)
+		attachRepo = repositories.NewAttachmentRepository(pool)
+	}
 	hasher := services.NewPasswordHasher()
 	jwt := services.NewJWTIssuer(jwtSecret, "fuzzy-builder", 24*time.Hour)
 

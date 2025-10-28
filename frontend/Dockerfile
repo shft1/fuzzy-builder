@@ -2,9 +2,10 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* .npmrc* ./
-RUN npm ci || npm i
+# кэш npm
+RUN --mount=type=cache,target=/root/.npm npm ci || npm i
 COPY . .
-RUN npm run build
+RUN --mount=type=cache,target=/root/.npm npm run build
 
 # runtime stage
 FROM nginx:1.27-alpine
